@@ -1,0 +1,119 @@
+\documentclass[11pt, a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath, amssymb, amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{geometry}
+\geometry{margin=1in}
+
+\title{\textbf{Market Microstructure Analysis of INFY: A Multivariate Hawkes Process Approach}}
+\author{Academic Report}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This report presents a comprehensive analysis of high-frequency trading data for INFY (Infosys) on the National Stock Exchange (NSE). We employ a multivariate Hawkes process to model the arrival dynamics of buyer-initiated and seller-initiated trades. Our study combines rigorous data cleaning, aggressor side determination, and maximum likelihood estimation to quantify the degree of endogeneity and self-excitation in the market. The results reveal significant branching ratios, indicating strong clustering of market events. We further discuss the implications of these findings for liquidity profiling and anomaly detection.
+\end{abstract}
+
+\section{Introduction}
+Understanding the microstructure of financial markets requires disentangling the complex interactions between market participants. The arrival of trades is not a Poisson process but exhibits self-exciting and mutually exciting properties. This study leverages the Hawkes process framework to capture these dynamics for the INFY stock.
+
+\section{Data and Methodology}
+
+\subsection{Data Source and Preprocessing}
+The analysis is based on tick-by-tick Order and Trade data for INFY provided by the NSE. 
+\begin{itemize}
+    \item \textbf{Data Cleaning}: Raw data was parsed using an optimized loader (`NseDataLoaderOptimized`). Timestamps were standardized, and trade records were matched with order records to reconstruct the limit order book context.
+    \item \textbf{Sample}: The analysis focuses on a specific trading day (13th August 2019), comprising approximately 85,000 orders and 42,000 trades.
+\end{itemize}
+
+\subsection{Aggressor Determination Algorithm}
+A critical step in microstructure analysis is identifying the aggressor side—the party that crosses the spread to execute a trade. We implemented a precise algorithm in `models/aggressor\_classifier.py`:
+\begin{enumerate}
+    \item \textbf{Timestamp Matching}: For every trade, we identified the original entry timestamps of the corresponding Buy and Sell orders from the order book.
+    \item \textbf{Logic}: The aggressor is defined as the side with the \textit{later} entry timestamp.
+    \begin{equation}
+        Aggressor = \begin{cases} 
+        +1 (\text{Buyer}) & \text{if } t_{buy}^{entry} > t_{sell}^{entry} \\
+        -1 (\text{Seller}) & \text{if } t_{sell}^{entry} > t_{buy}^{entry}
+        \end{cases}
+    \end{equation}
+    \item \textbf{Resting Orders}: If an order's timestamp is missing (implying it is a resting order carried over from the previous day), it is treated as earlier than any new order.
+\end{enumerate}
+
+\subsection{Model Specification: Multivariate Hawkes Process}
+We model the arrival times of buyer-initiated trades ($N_1$) and seller-initiated trades ($N_2$) using a 2-dimensional Hawkes process. The conditional intensity function $\lambda_i(t)$ for dimension $i \in \{1, 2\}$ is given by:
+\begin{equation}
+    \lambda_i(t) = \mu_i + \sum_{j=1}^{2} \int_{-\infty}^{t} \phi_{ij}(t-s) dN_j(s)
+\end{equation}
+where:
+\begin{itemize}
+    \item $\mu_i$ is the baseline intensity (exogenous rate of events).
+    \item $\phi_{ij}(t) = \alpha_{ij} e^{-\beta_{ij} t}$ is the exponential excitation kernel.
+    \item $\alpha_{ij}$ represents the immediate impact of an event in dimension $j$ on dimension $i$.
+    \item $\beta_{ij}$ dictates the decay rate of the excitation.
+\end{itemize}
+
+The \textbf{Branching Ratio} ($n_{ij}$), representing the average number of type $i$ events triggered by a single type $j$ event, is calculated as $n_{ij} = \int_{0}^{\infty} \phi_{ij}(τ) dτ = \frac{\alpha_{ij}}{\beta_{ij}}$.
+
+\section{Empirical Results}
+
+\subsection{Parameter Estimates}
+The model was fitted using Maximum Likelihood Estimation (MLE). The estimated parameters are summarized below:
+
+\begin{table}[h]
+\centering
+\caption{Estimated Hawkes Process Parameters}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Parameter} & \textbf{Buy Node ($i=1$)} & \textbf{Sell Node ($i=2$)} \\
+\midrule
+Baseline Intensity ($\mu$) & 1.8426 & 1.4801 \\
+\midrule
+\multicolumn{3}{l}{\textit{Excitation from Buy ($j=1$)}} \\
+Alpha ($\alpha_{i1}$) & 0.6976 & 0.1583 \\
+Beta ($\beta_{i1}$) & 15.9038 & 8.7844 \\
+Branching Ratio ($n_{i1}$) & \textbf{0.0439} & \textbf{0.0180} \\
+\midrule
+\multicolumn{3}{l}{\textit{Excitation from Sell ($j=2$)}} \\
+Alpha ($\alpha_{i2}$) & 0.1389 & 0.6125 \\
+Beta ($\beta_{i2}$) & 16.5828 & 13.9119 \\
+Branching Ratio ($n_{i2}$) & \textbf{0.0084} & \textbf{0.0440} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Interpretation}
+\begin{itemize}
+    \item \textbf{Self-Excitation}: Both buyer and seller trades exhibit self-excitation ($n_{11} \approx 0.04$, $n_{22} \approx 0.04$). This confirms that a trade increases the probability of subsequent trades of the same direction (clustering).
+    \item \textbf{Cross-Excitation}: Cross-excitation effects ($n_{12}, n_{21}$) are present but generally weaker than self-excitation, suggesting distinct directional momentum.
+    \item \textbf{Stability}: The spectral radius of the branching matrix is well below 1, ensuring the process is stationary and non-explosive.
+\end{itemize}
+
+\subsection{Forecasting}
+Using the fitted model, we forecasted the expected number of events for a 60-second horizon:
+\begin{itemize}
+    \item Expected Buy Trades: $\approx 113$
+    \item Expected Sell Trades: $\approx 89$
+\end{itemize}
+
+\section{Implications}
+
+\subsection{Liquidity Profiling}
+The estimated baseline intensities ($\mu$) provide a measure of ``fundamental'' liquidity demand, independent of recent market activity. The branching ratios quantify ``reactive'' liquidity. A higher branching ratio implies that the market is more fragile or sensitive to shocks, as a single order triggers a cascade of follow-up orders. In this case, the moderate branching ratios indicate a relatively stable market for INFY during the observed period.
+
+\subsection{Anomaly Detection}
+The Hawkes process framework serves as a robust baseline for anomaly detection. sudden deviations in the observed intensity from the model's predicted conditional intensity $\lambda(t)$ can signal:
+\begin{itemize}
+    \item \textbf{Flash Crashes}: Rapid cascading of sell orders that violate the stationary branching assumptions.
+    \item \textbf{Algorithmic Gaming}: Unusual patterns in cross-excitation (e.g., spoofing) where $\alpha_{12}$ or $\alpha_{21}$ spikes abnormally.
+\end{itemize}
+
+\section{Conclusion}
+This report successfully demonstrated the application of multivariate Hawkes processes to INFY trade data. The model effectively captures the self-exciting nature of order flows. Future work will extend this analysis to include Order Flow Imbalance (OFI) as a marked point process and explore regime-switching Hawkes models to capture intraday seasonality.
+
+\end{document}

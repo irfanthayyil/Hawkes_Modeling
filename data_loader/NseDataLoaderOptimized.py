@@ -10,7 +10,13 @@ from typing import List, Tuple, Optional
 from datetime import datetime
 
 # assuming NseDataLoader is defined as in your file
-from NseDataLoader import NseDataLoader
+try:
+    from .NseDataLoader import NseDataLoader
+except ImportError:
+    try:
+        from data_loader.NseDataLoader import NseDataLoader
+    except ImportError:
+        from NseDataLoader import NseDataLoader
 
 class NseDataLoaderOptimized(NseDataLoader):
     """
@@ -70,8 +76,6 @@ class NseDataLoaderOptimized(NseDataLoader):
                 ser      = fields[idx_series].strip()   if idx_series is not None else ''
 
                 # Regular Market, CASH segment, requested symbol, EQ series only
-                if rec_type != 'RM':
-                    continue
                 if seg != 'CASH':
                     continue
                 if sym != symbol:
@@ -200,6 +204,129 @@ class NseDataLoaderOptimized(NseDataLoader):
             return orders_csv_path, trades_csv_path
 
         return orders_df, trades_df
+    
+    def process_orders_only(self, order_filepath, symbol, output_dir=None):
+        """
+        Process only order data for a single symbol from a raw order file.
+        
+        This function is useful when you only have order files or only need to process orders.
+        
+        Args:
+            order_filepath (str): path to CASH_Orders_YYYYMMDD.DAT.gz
+            symbol (str): NSE symbol, e.g. 'INFY'
+            output_dir (str or None): Optional. Directory where order CSV file should be saved.
+                If None, returns the DataFrame. If provided, saves to CSV and returns the path.
+                
+        Returns:
+            If output_dir is None:
+                orders_df: cleaned DataFrame containing order data
+            If output_dir is provided:
+                orders_csv_path: path to saved CSV file
+                
+        Example:
+            # Return DataFrame
+            orders_df = loader.process_orders_only('CASH_Orders_19082019.DAT.gz', 'INFY')
+            
+            # Save to CSV
+            csv_path = loader.process_orders_only(
+                'CASH_Orders_19082019.DAT.gz', 
+                'INFY', 
+                output_dir='data/outputs/orders'
+            )
+        """
+        logging.info(f"Processing orders only for symbol={symbol} from {order_filepath}")
+        
+        # Stream and extract orders for the symbol
+        raw_orders = self._stream_fwf_symbol(
+            filepath=order_filepath,
+            schema=self.ORDER_SCHEMA,
+            symbol=symbol,
+            file_type='order'
+        )
+        
+        # Clean the data
+        orders_df = self._clean_data(raw_orders, 'order')
+        
+        # Save to CSV if output directory provided
+        if output_dir is not None:
+            date = self._extract_date_from_filename(order_filepath)
+            
+            # Create output directory if it doesn't exist
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Generate output path
+            orders_csv_path = self._create_output_path(output_dir, symbol, date, 'orders')
+            
+            # Save DataFrame
+            logging.info(f"Saving orders to {orders_csv_path}")
+            orders_df.to_csv(orders_csv_path, index=False)
+            
+            logging.info(f"Saved {len(orders_df)} orders for {symbol} on {date}")
+            return orders_csv_path
+        
+        return orders_df
+    
+    def process_trades_only(self, trade_filepath, symbol, output_dir=None):
+        """
+        Process only trade data for a single symbol from a raw trade file.
+        
+        This function is useful when you only have trade files or only need to process trades.
+        
+        Args:
+            trade_filepath (str): path to CASH_Trades_YYYYMMDD.DAT.gz
+            symbol (str): NSE symbol, e.g. 'INFY'
+            output_dir (str or None): Optional. Directory where trade CSV file should be saved.
+                If None, returns the DataFrame. If provided, saves to CSV and returns the path.
+                
+        Returns:
+            If output_dir is None:
+                trades_df: cleaned DataFrame containing trade data
+            If output_dir is provided:
+                trades_csv_path: path to saved CSV file
+                
+        Example:
+            # Return DataFrame
+            trades_df = loader.process_trades_only('CASH_Trades_19082019.DAT.gz', 'INFY')
+            
+            # Save to CSV
+            csv_path = loader.process_trades_only(
+                'CASH_Trades_19082019.DAT.gz', 
+                'INFY', 
+                output_dir='data/outputs/trades'
+            )
+        """
+        logging.info(f"Processing trades only for symbol={symbol} from {trade_filepath}")
+        
+        # Stream and extract trades for the symbol
+        raw_trades = self._stream_fwf_symbol(
+            filepath=trade_filepath,
+            schema=self.TRADE_SCHEMA,
+            symbol=symbol,
+            file_type='trade'
+        )
+        
+        # Clean the data
+        trades_df = self._clean_data(raw_trades, 'trade')
+        
+        # Save to CSV if output directory provided
+        if output_dir is not None:
+            date = self._extract_date_from_filename(trade_filepath)
+            
+            # Create output directory if it doesn't exist
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Generate output path
+            trades_csv_path = self._create_output_path(output_dir, symbol, date, 'trades')
+            
+            # Save DataFrame
+            logging.info(f"Saving trades to {trades_csv_path}")
+            trades_df.to_csv(trades_csv_path, index=False)
+            
+            logging.info(f"Saved {len(trades_df)} trades for {symbol} on {date}")
+            return trades_csv_path
+        
+        return trades_df
+
 
     def load_and_save_symbol_for_day_direct(self, order_filepath, trade_filepath, symbol, output_dir):
         """
@@ -315,7 +442,7 @@ class NseDataLoaderOptimized(NseDataLoader):
                 sym = fields[idx_symbol].strip() if idx_symbol is not None else ''
                 ser = fields[idx_series].strip() if idx_series is not None else ''
                 
-                if rec_type != 'RM' or seg != 'CASH' or sym != symbol or ser != 'EQ':
+                if seg != 'CASH' or sym != symbol or ser != 'EQ':
                     continue
                 
                 # Buffer this row
