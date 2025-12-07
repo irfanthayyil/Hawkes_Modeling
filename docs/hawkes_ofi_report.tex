@@ -1,0 +1,82 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{booktabs}
+\usepackage{amsmath}
+
+\geometry{a4paper, margin=1in}
+
+\title{Hawkes-process modeling of Order-Flow Imbalance (OFI)}
+\author{Mohammed Irfan T}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Data Preparation and Methodology}
+
+This report details the data acquisition, cleaning, and preprocessing steps utilized to construct the dataset for Hawkes process modeling of Order-Flow Imbalance (OFI). The procedures employed ensure a high-fidelity reconstruction of the Limit Order Book (LOB) dynamics, specifically focusing on the rigorous classification of trade aggressors.
+
+\subsection{Data Source}
+The analysis is based on high-frequency tick-level data sourced from the National Stock Exchange of India (NSE). The raw data consists of two primary separate streams:
+\begin{itemize}
+    \item \textbf{Order Tick Data}: Contains every order entry, modification, and cancellation.
+    \item \textbf{Trade Tick Data}: Contains every executed trade.
+\end{itemize}
+
+The data was provided in compressed \texttt{.DAT.gz} format.
+
+\subsection{Scope and Duration}
+The study focuses on \textbf{Infosys Ltd. (INFY)}, utilizing data from the \textbf{Cash Segment}, Series \textbf{EQ}. The dataset spans \textbf{10 trading days} from August 13, 2019, to August 27, 2019 (excluding weekends and holidays). The specific dates processed are:
+\begin{itemize}
+    \item August 13, 14, 16, 19, 20, 21, 22, 23, 26, 27, 2019.
+\end{itemize}
+
+\subsection{Data Processing Procedure}
+
+The data preparation pipeline comprised three distinct stages: Extraction, Aggressor Classification, and Consolidation.
+
+\subsubsection{1. Data Extraction and Cleaning}
+A custom optimized data loader was developed to stream the large raw daily files. The following filtering criteria were applied during extraction:
+\begin{itemize}
+    \item \textbf{Segment}: 'CASH'
+    \item \textbf{Symbol}: 'INFY'
+    \item \textbf{Series}: 'EQ'
+\end{itemize}
+
+For each day, the raw fixed-width files were parsed into structured CSV formats. The schemas extracted are as follows:
+
+\paragraph{Order Data Fields:} \texttt{record\_type}, \texttt{segment}, \texttt{order\_number}, \texttt{timestamp}, \texttt{side}, \texttt{activity\_type} (ENTRY/MODIFY/CANCEL), \texttt{symbol}, \texttt{series}, \texttt{volume}, \texttt{limit\_price}, \texttt{trigger\_price}, \texttt{algo\_indicator}, \texttt{client\_type}.
+
+\paragraph{Trade Data Fields:} \texttt{trade\_number}, \texttt{timestamp}, \texttt{trade\_price}, \texttt{volume}, \texttt{buy\_order\_number}, \texttt{sell\_order\_number}, \texttt{buy\_algo}, \texttt{sell\_algo}.
+
+\subsubsection{2. Aggressor Classification Logic}
+A critical step in OFI modeling is identifying the "aggressor" — the side (buy or sell) that initiated the trade by crossing the spread. Since the raw trade data does not explicitly flag the aggressor, it was derived by reconstructing the order matching timeline.
+
+For every trade, the corresponding \texttt{buy\_order\_number} and \texttt{sell\_order\_number} were mapped to their original \texttt{timestamp} from the Order Data (specifically the \texttt{ENTRY} activity type).
+
+Let $T_{buy}$ be the entry timestamp of the buy order and $T_{sell}$ be the entry timestamp of the sell order. The aggressor side $\epsilon$ is determined as:
+
+\[
+\epsilon = 
+\begin{cases} 
++1 \text{ (Buyer Initiated)} & \text{if } T_{buy} > T_{sell} \\
+-1 \text{ (Seller Initiated)} & \text{if } T_{sell} > T_{buy}
+\end{cases}
+\]
+
+\textbf{Logic}: In a Price-Time priority matching engine (like NSE), the passive order must already be resting in the book. The active order (aggressor) arrives later and matches immediately. Thus, the order with the later entry timestamp is the aggressor.
+
+\emph{Edge Cases}:
+\begin{itemize}
+    \item If the sell order was missing from the records (e.g., IOC or market order nuances), the buy order was assumed successfully resting, implying the missing sell order was the aggressor ($\epsilon = -1$).
+    \item Conversely, if the buy order was missing, the trade was classified as Buyer Initiated ($\epsilon = +1$).
+\end{itemize}
+
+\subsubsection{3. Dataset Creation}
+The processed daily trade files, now augmented with the determined \texttt{aggressor\_side}, \texttt{buy\_entry\_ts}, and \texttt{sell\_entry\_ts}, were concatenated into a single unified dataset. The final consolidated file was saved to \texttt{../data/hawkes\_analysis\_data.csv} for subsequent Hawkes process modeling.
+
+\end{document}
