@@ -6,7 +6,7 @@ This project presents a comprehensive analysis of high-frequency trading data fo
 
 The study combines rigorous data cleaning, aggressor side determination, and maximum likelihood estimation (MLE) to quantify the degree of endogeneity and self-excitation in the market. The results reveal significant branching ratios, indicating strong clustering of market events.
 
-**Full Report**: See `docs/final_report.tex` (or the PDF version if available) for the detailed academic report.
+**Full Report**: See `docs/Hawkes-process modeling for Self-Exciting Market Dynamics Study.pdf` for the detailed academic report.
 
 ---
 
@@ -32,9 +32,11 @@ Hawkes_Modeling/
 │   └── process_23rd_data.py       # Utility for processing specific dates
 │
 ├── models/                      # Core modeling logic
-│   ├── aggressor_classifier.py    # Logic to determine trade aggressor (Buyer/Seller)
-│   ├── hawkes_model.py            # Hawkes process model definitions
-│   └── hawkes_utils.py            # Helper functions for diagnostics and plotting
+│   ├── aggressor_classifier.py       # Logic to determine trade aggressor (Buyer/Seller)
+│   ├── BivariateHawkes.py             # Custom Bivariate Hawkes implementation
+│   ├── BivariateHawkes_optimized.py   # Optimized Bivariate Hawkes implementation
+│   ├── MarkedBivariateHawkes.py       # Marked Hawkes implementation
+│   └── MarkedBivariateHawkes_optimized.py       # Optimized Marked Hawkes implementation
 │
 ├── preprocessing/               # Data preparation
 │   ├── aggressor_calculator.py    # Calculator for aggressor side
@@ -49,7 +51,6 @@ Hawkes_Modeling/
 │   └── MarkedBivariateHawkes.py   # Marked Hawkes implementation (Volume/OFI)
 │
 └── docs/                        # Project documentation and reports
-    └── final_report.tex           # Academic report source
 ```
 
 ---
@@ -59,7 +60,7 @@ Hawkes_Modeling/
 ### **1. Data Processing**
 *   **Source**: NSE Tick-by-Tick data (Orders and Trades).
 *   **Loader**: `NseDataLoaderOptimized` reads compressed data files line-by-line to handle large volumes efficiently.
-*   **Sample**: Analysis focuses on **August 13, 2019**, for symbol **INFY**.
+*   **Sample**: Analysis focuses on **August 13 to 27th, 2019**, for symbol **INFY**.
 
 ### **2. Aggressor Determination**
 To classify trades as Buyer-Initiated or Seller-Initiated, we match trade records with their corresponding orders. Since the aggressor is the party crossing the spread (arriving later):
@@ -69,7 +70,7 @@ To classify trades as Buyer-Initiated or Seller-Initiated, we match trade record
     *   **Buyer Initiated (+1)**: if $t_{buy}^{entry} > t_{sell}^{entry}$
     *   **Seller Initiated (-1)**: if $t_{sell}^{entry} > t_{buy}^{entry}$
 
-*Implemented in `models/aggressor_classifier.py`.*
+*Implemented in `models/aggressor_calculator.py`.*
 
 ### **3. Multivariate Hawkes Process**
 We model the intensities $\lambda_1(t)$ (Buy) and $\lambda_2(t)$ (Sell) as:
@@ -84,7 +85,7 @@ $$ \lambda_i(t) = \mu_i + \sum_{j=1}^{2} \int_{-\infty}^{t} \alpha_{ij} e^{-\bet
 
 ## **Empirical Findings (INFY)**
 
-Based on the analysis of the August 13, 2019 dataset:
+Based on the analysis of the August 13-27, 2019 dataset:
 
 *   **Self-Excitation**: Strong evidence of clustering.
     *   Buy $\to$ Buy Branching Ratio ($n_{11}$) $\approx 0.04$
